@@ -49,9 +49,17 @@ func main() {
 	}
 
 	l1 := tc128.Mul(set.Get("b"), set.Get("c"))
-	cost := tc128.Avg(tc128.Quadratic(l1, set.Get("a")))
+	l2 := tc128.Mul(set.Get("a"), set.Get("c"))
+	l3 := tc128.Mul(set.Get("a"), set.Get("b"))
+	cost := tc128.Add(
+		tc128.Add(
+			tc128.Avg(tc128.Quadratic(l1, set.Get("a"))),
+			tc128.Avg(tc128.Quadratic(l2, set.Get("b"))),
+		),
+		tc128.Avg(tc128.Quadratic(l3, set.Get("c"))),
+	)
 
-	eta, iterations := complex128(.3+.3i), 128
+	eta, iterations := complex128(.3+.3i), 1024
 
 	points := make(plotter.XYs, 0, iterations)
 	i := 0
