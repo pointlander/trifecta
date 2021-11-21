@@ -22,6 +22,8 @@ import (
 const (
 	// Size is the size of the neuron
 	Size = 3
+	// Eta is how fast the model will learn
+	Eta = .3 + .3i
 )
 
 // https://www.geeksforgeeks.org/determinant-of-a-matrix/
@@ -56,8 +58,23 @@ func determinant(mat []complex128, n int) complex128 {
 	return d
 }
 
-func main() {
-	rand.Seed(1)
+// Neuron is a neuron
+type Neuron struct {
+	Iteration  int
+	Set        *tc128.Set
+	Rand       *rand.Rand
+	E1, E2, E3 tc128.Meta
+	Cost       tc128.Meta
+	Abs        plotter.XYs
+	Phase      plotter.XYs
+	Deta       plotter.XYs
+	Detb       plotter.XYs
+	Detc       plotter.XYs
+}
+
+// NewNeuron creates a new neuron
+func NewNeuron(seed int64) *Neuron {
+	rnd := rand.New(rand.NewSource(seed))
 
 	set := tc128.NewSet()
 	set.Add("a", Size, Size)
@@ -65,7 +82,7 @@ func main() {
 	set.Add("c", Size, Size)
 
 	random128 := func(a, b float64) complex128 {
-		return complex((b-a)*rand.Float64()+a, (b-a)*rand.Float64()+a)
+		return complex((b-a)*rnd.Float64()+a, (b-a)*rnd.Float64()+a)
 	}
 
 	for i := range set.Weights {
@@ -81,100 +98,117 @@ func main() {
 		}
 	}
 
-	l1 := tc128.Mul(set.Get("b"), set.Get("c"))
-	l2 := tc128.Mul(set.Get("a"), set.Get("c"))
-	l3 := tc128.Mul(set.Get("a"), set.Get("b"))
+	abs := make(plotter.XYs, 0, 8)
+	phase := make(plotter.XYs, 0, 8)
+	deta := make(plotter.XYs, 0, 8)
+	detb := make(plotter.XYs, 0, 8)
+	detc := make(plotter.XYs, 0, 8)
+
+	e1 := tc128.Mul(set.Get("b"), set.Get("c"))
+	e2 := tc128.Mul(set.Get("a"), set.Get("c"))
+	e3 := tc128.Mul(set.Get("a"), set.Get("b"))
 	cost := tc128.Add(
 		tc128.Add(
-			tc128.Avg(tc128.Quadratic(l1, set.Get("a"))),
-			tc128.Avg(tc128.Quadratic(l2, set.Get("b"))),
+			tc128.Avg(tc128.Quadratic(e1, set.Get("a"))),
+			tc128.Avg(tc128.Quadratic(e2, set.Get("b"))),
 		),
-		tc128.Avg(tc128.Quadratic(l3, set.Get("c"))),
+		tc128.Avg(tc128.Quadratic(e3, set.Get("c"))),
 	)
 
-	eta, iterations := complex128(.3+.3i), 1024
+	return &Neuron{
+		Set:   &set,
+		Rand:  rnd,
+		E1:    e1,
+		E2:    e2,
+		E3:    e3,
+		Cost:  cost,
+		Abs:   abs,
+		Phase: phase,
+		Deta:  deta,
+		Detb:  detb,
+		Detc:  detc,
+	}
+}
 
-	points := make(plotter.XYs, 0, iterations)
-	phase := make(plotter.XYs, 0, iterations)
-	deta := make(plotter.XYs, 0, iterations)
-	detb := make(plotter.XYs, 0, iterations)
-	detc := make(plotter.XYs, 0, iterations)
-	i := 0
-	for i < iterations {
-		total := complex128(0)
-		set.Zero()
+// Iterate iterates the model
+func (n *Neuron) Iterate() {
+	total := complex128(0)
+	n.Set.Zero()
 
-		total += tc128.Gradient(cost).X[0]
-		sum := 0.0
-		for _, p := range set.Weights {
-			for _, d := range p.D {
-				sum += cmplx.Abs(d) * cmplx.Abs(d)
-			}
+	total += tc128.Gradient(n.Cost).X[0]
+	sum := 0.0
+	for _, p := range n.Set.Weights {
+		for _, d := range p.D {
+			sum += cmplx.Abs(d) * cmplx.Abs(d)
 		}
-		norm := float64(math.Sqrt(float64(sum)))
-		scaling := float64(1)
-		if norm > 1 {
-			scaling = 1 / norm
-		}
-
-		for _, p := range set.Weights {
-			for l, d := range p.D {
-				p.X[l] -= eta * d * complex(scaling, 0)
-			}
-		}
-
-		da := determinant(set.Weights[0].X, Size)
-		if cmplx.IsInf(da) {
-			break
-		}
-		a := cmplx.Abs(da)
-		if a < 0 {
-			a = -a
-		}
-		if math.IsInf(a, 0) {
-			break
-		}
-		deta = append(deta, plotter.XY{X: float64(i), Y: a})
-
-		db := determinant(set.Weights[1].X, Size)
-		if cmplx.IsInf(db) {
-			break
-		}
-		b := cmplx.Abs(db)
-		if b < 0 {
-			b = -b
-		}
-		if math.IsInf(b, 0) {
-			break
-		}
-		detb = append(detb, plotter.XY{X: float64(i), Y: b})
-
-		dc := determinant(set.Weights[1].X, Size)
-		if cmplx.IsInf(dc) {
-			break
-		}
-		c := cmplx.Abs(dc)
-		if c < 0 {
-			c = -c
-		}
-		if math.IsInf(c, 0) {
-			break
-		}
-		detc = append(detc, plotter.XY{X: float64(i), Y: c})
-
-		points = append(points, plotter.XY{X: float64(i), Y: cmplx.Abs(total)})
-		phase = append(phase, plotter.XY{X: float64(i), Y: cmplx.Phase(total)})
-		fmt.Println(i, cmplx.Abs(total))
-		i++
+	}
+	norm := float64(math.Sqrt(float64(sum)))
+	scaling := float64(1)
+	if norm > 1 {
+		scaling = 1 / norm
 	}
 
+	for _, p := range n.Set.Weights {
+		for l, d := range p.D {
+			p.X[l] -= Eta * d * complex(scaling, 0)
+		}
+	}
+
+	da := determinant(n.Set.Weights[0].X, Size)
+	if cmplx.IsInf(da) {
+		return
+	}
+	a := cmplx.Abs(da)
+	if a < 0 {
+		a = -a
+	}
+	if math.IsInf(a, 0) {
+		return
+	}
+	n.Deta = append(n.Deta, plotter.XY{X: float64(n.Iteration), Y: a})
+
+	db := determinant(n.Set.Weights[1].X, Size)
+	if cmplx.IsInf(db) {
+		return
+	}
+	b := cmplx.Abs(db)
+	if b < 0 {
+		b = -b
+	}
+	if math.IsInf(b, 0) {
+		return
+	}
+	n.Detb = append(n.Detb, plotter.XY{X: float64(n.Iteration), Y: b})
+
+	dc := determinant(n.Set.Weights[1].X, Size)
+	if cmplx.IsInf(dc) {
+		return
+	}
+	c := cmplx.Abs(dc)
+	if c < 0 {
+		c = -c
+	}
+	if math.IsInf(c, 0) {
+		return
+	}
+	n.Detc = append(n.Detc, plotter.XY{X: float64(n.Iteration), Y: c})
+
+	n.Abs = append(n.Abs, plotter.XY{X: float64(n.Iteration), Y: cmplx.Abs(total)})
+	n.Phase = append(n.Phase, plotter.XY{X: float64(n.Iteration), Y: cmplx.Phase(total)})
+	fmt.Println(n.Iteration, cmplx.Abs(total))
+
+	n.Iteration++
+}
+
+// Graph graphs the properties of the neuron
+func (n *Neuron) Graph() {
 	p := plot.New()
 
 	p.Title.Text = "epochs vs cost"
 	p.X.Label.Text = "epochs"
 	p.Y.Label.Text = "cost"
 
-	scatter, err := plotter.NewScatter(points)
+	scatter, err := plotter.NewScatter(n.Abs)
 	if err != nil {
 		panic(err)
 	}
@@ -193,7 +227,7 @@ func main() {
 	p.X.Label.Text = "phase"
 	p.Y.Label.Text = "phase"
 
-	scatter, err = plotter.NewScatter(phase)
+	scatter, err = plotter.NewScatter(n.Phase)
 	if err != nil {
 		panic(err)
 	}
@@ -206,7 +240,7 @@ func main() {
 		panic(err)
 	}
 
-	for _, w := range set.Weights {
+	for _, w := range n.Set.Weights {
 		fmt.Println(w.X)
 	}
 
@@ -216,7 +250,7 @@ func main() {
 	p.X.Label.Text = "epochs"
 	p.Y.Label.Text = "det"
 
-	scatter, err = plotter.NewScatter(deta)
+	scatter, err = plotter.NewScatter(n.Deta)
 	if err != nil {
 		panic(err)
 	}
@@ -225,7 +259,7 @@ func main() {
 	scatter.GlyphStyle.Color = color.RGBA{0xFF, 0, 0, 255}
 	p.Add(scatter)
 
-	scatter, err = plotter.NewScatter(detb)
+	scatter, err = plotter.NewScatter(n.Detb)
 	if err != nil {
 		panic(err)
 	}
@@ -234,7 +268,7 @@ func main() {
 	scatter.GlyphStyle.Color = color.RGBA{0, 0, 0xFF, 255}
 	p.Add(scatter)
 
-	scatter, err = plotter.NewScatter(detc)
+	scatter, err = plotter.NewScatter(n.Detc)
 	if err != nil {
 		panic(err)
 	}
@@ -247,4 +281,17 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func main() {
+	n := NewNeuron(1)
+	iterations := 1024
+
+	i := 0
+	for i < iterations {
+		n.Iterate()
+		i++
+	}
+
+	n.Graph()
 }
