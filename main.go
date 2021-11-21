@@ -95,6 +95,7 @@ func main() {
 	eta, iterations := complex128(.3+.3i), 1024
 
 	points := make(plotter.XYs, 0, iterations)
+	phase := make(plotter.XYs, 0, iterations)
 	deta := make(plotter.XYs, 0, iterations)
 	detb := make(plotter.XYs, 0, iterations)
 	detc := make(plotter.XYs, 0, iterations)
@@ -162,6 +163,7 @@ func main() {
 		detc = append(detc, plotter.XY{X: float64(i), Y: c})
 
 		points = append(points, plotter.XY{X: float64(i), Y: cmplx.Abs(total)})
+		phase = append(phase, plotter.XY{X: float64(i), Y: cmplx.Phase(total)})
 		fmt.Println(i, cmplx.Abs(total))
 		i++
 	}
@@ -181,6 +183,25 @@ func main() {
 	p.Add(scatter)
 
 	err = p.Save(8*vg.Inch, 8*vg.Inch, "cost.png")
+	if err != nil {
+		panic(err)
+	}
+
+	p = plot.New()
+
+	p.Title.Text = "epochs vs phase"
+	p.X.Label.Text = "phase"
+	p.Y.Label.Text = "phase"
+
+	scatter, err = plotter.NewScatter(phase)
+	if err != nil {
+		panic(err)
+	}
+	scatter.GlyphStyle.Radius = vg.Length(1)
+	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
+	p.Add(scatter)
+
+	err = p.Save(8*vg.Inch, 8*vg.Inch, "phase.png")
 	if err != nil {
 		panic(err)
 	}
