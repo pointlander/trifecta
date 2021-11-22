@@ -60,6 +60,7 @@ func determinant(mat []complex128, n int) complex128 {
 
 // Neuron is a neuron
 type Neuron struct {
+	Name       int
 	Iteration  int
 	Set        *tc128.Set
 	Rand       *rand.Rand
@@ -73,7 +74,7 @@ type Neuron struct {
 }
 
 // NewNeuron creates a new neuron
-func NewNeuron(seed int64) *Neuron {
+func NewNeuron(name int, seed int64) *Neuron {
 	rnd := rand.New(rand.NewSource(seed))
 
 	set := tc128.NewSet()
@@ -116,6 +117,7 @@ func NewNeuron(seed int64) *Neuron {
 	)
 
 	return &Neuron{
+		Name:  name,
 		Set:   &set,
 		Rand:  rnd,
 		E1:    e1,
@@ -131,7 +133,7 @@ func NewNeuron(seed int64) *Neuron {
 }
 
 // Iterate iterates the model
-func (n *Neuron) Iterate() {
+func (n *Neuron) Iterate() float64 {
 	total := complex128(0)
 	n.Set.Zero()
 
@@ -156,48 +158,49 @@ func (n *Neuron) Iterate() {
 
 	da := determinant(n.Set.Weights[0].X, Size)
 	if cmplx.IsInf(da) {
-		return
+		return -1
 	}
 	a := cmplx.Abs(da)
 	if a < 0 {
 		a = -a
 	}
 	if math.IsInf(a, 0) {
-		return
+		return -1
 	}
 	n.Deta = append(n.Deta, plotter.XY{X: float64(n.Iteration), Y: a})
 
 	db := determinant(n.Set.Weights[1].X, Size)
 	if cmplx.IsInf(db) {
-		return
+		return -1
 	}
 	b := cmplx.Abs(db)
 	if b < 0 {
 		b = -b
 	}
 	if math.IsInf(b, 0) {
-		return
+		return -1
 	}
 	n.Detb = append(n.Detb, plotter.XY{X: float64(n.Iteration), Y: b})
 
 	dc := determinant(n.Set.Weights[1].X, Size)
 	if cmplx.IsInf(dc) {
-		return
+		return -1
 	}
 	c := cmplx.Abs(dc)
 	if c < 0 {
 		c = -c
 	}
 	if math.IsInf(c, 0) {
-		return
+		return -1
 	}
 	n.Detc = append(n.Detc, plotter.XY{X: float64(n.Iteration), Y: c})
 
 	n.Abs = append(n.Abs, plotter.XY{X: float64(n.Iteration), Y: cmplx.Abs(total)})
 	n.Phase = append(n.Phase, plotter.XY{X: float64(n.Iteration), Y: cmplx.Phase(total)})
-	fmt.Println(n.Iteration, cmplx.Abs(total))
 
 	n.Iteration++
+
+	return cmplx.Abs(total)
 }
 
 // Graph graphs the properties of the neuron
@@ -216,7 +219,7 @@ func (n *Neuron) Graph() {
 	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
 	p.Add(scatter)
 
-	err = p.Save(8*vg.Inch, 8*vg.Inch, "cost.png")
+	err = p.Save(8*vg.Inch, 8*vg.Inch, fmt.Sprintf("%d_cost.png", n.Name))
 	if err != nil {
 		panic(err)
 	}
@@ -235,13 +238,9 @@ func (n *Neuron) Graph() {
 	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
 	p.Add(scatter)
 
-	err = p.Save(8*vg.Inch, 8*vg.Inch, "phase.png")
+	err = p.Save(8*vg.Inch, 8*vg.Inch, fmt.Sprintf("%d_phase.png", n.Name))
 	if err != nil {
 		panic(err)
-	}
-
-	for _, w := range n.Set.Weights {
-		fmt.Println(w.X)
 	}
 
 	p = plot.New()
@@ -277,21 +276,39 @@ func (n *Neuron) Graph() {
 	scatter.GlyphStyle.Color = color.RGBA{0, 0xFF, 0, 255}
 	p.Add(scatter)
 
-	err = p.Save(8*vg.Inch, 8*vg.Inch, "det.png")
+	err = p.Save(8*vg.Inch, 8*vg.Inch, fmt.Sprintf("%d_det.png", n.Name))
 	if err != nil {
 		panic(err)
 	}
 }
 
 func main() {
-	n := NewNeuron(1)
+	n0, n1 := NewNeuron(0, 1), NewNeuron(1, 2)
 	iterations := 1024
 
 	i := 0
 	for i < iterations {
-		n.Iterate()
+		v0 := n0.Iterate()
+		v1 := n1.Iterate()
+		if v0 > 128 {
+			fmt.Println("fire 0")
+			w0 := n0.Set.ByName["a"]
+			w1 := n1.Set.ByName["a"]
+			for j, value := range w0.X {
+				w1.X[j] = (w1.X[j] + value) / 2
+			}
+		}
+		if v1 > 128 {
+			fmt.Println("fire 1")
+			w0 := n0.Set.ByName["a"]
+			w1 := n1.Set.ByName["a"]
+			for j, value := range w1.X {
+				w0.X[j] = (w0.X[j] + value) / 2
+			}
+		}
 		i++
 	}
 
-	n.Graph()
+	n0.Graph()
+	n1.Graph()
 }
