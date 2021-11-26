@@ -285,6 +285,18 @@ func (n *Neuron) Graph() {
 	}
 }
 
+// Trigger triggers a neuron
+func (n *Neuron) Trigger(line string) {
+	random128 := func(a, b float64) complex128 {
+		return complex((b-a)*n.Rand.Float64()+a, (b-a)*n.Rand.Float64()+a)
+	}
+
+	w := n.Set.ByName[line]
+	for j := range w.X {
+		w.X[j] = random128(-1, 1)
+	}
+}
+
 // Connection is a connection between two neurons
 type Connection struct {
 	ANeuron *Neuron
@@ -294,6 +306,9 @@ type Connection struct {
 }
 
 func main() {
+	lines := []string{"a", "b", "c"}
+	rnd := rand.New(rand.NewSource(1))
+
 	neurons := []*Neuron{
 		NewNeuron(0, 1),
 		NewNeuron(1, 2),
@@ -352,6 +367,13 @@ func main() {
 				}
 			} else {
 				connection.BNeuron.Fired = false
+			}
+		}
+		if rnd.Intn(128) == 0 {
+			for _, neuron := range neurons {
+				if !neuron.Fired {
+					neuron.Trigger(lines[rnd.Intn(3)])
+				}
 			}
 		}
 		i++
