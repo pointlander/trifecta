@@ -71,6 +71,8 @@ type Neuron struct {
 	Deta       plotter.XYs
 	Detb       plotter.XYs
 	Detc       plotter.XYs
+	Level      float64
+	Fired      bool
 }
 
 // NewNeuron creates a new neuron
@@ -199,6 +201,7 @@ func (n *Neuron) Iterate() float64 {
 	n.Phase = append(n.Phase, plotter.XY{X: float64(n.Iteration), Y: cmplx.Phase(total)})
 
 	n.Iteration++
+	n.Level = cmplx.Abs(total)
 
 	return cmplx.Abs(total)
 }
@@ -282,33 +285,79 @@ func (n *Neuron) Graph() {
 	}
 }
 
-func main() {
-	n0, n1 := NewNeuron(0, 1), NewNeuron(1, 2)
-	iterations := 1024
+// Connection is a connection between two neurons
+type Connection struct {
+	ANeuron *Neuron
+	ALine   string
+	BNeuron *Neuron
+	BLine   string
+}
 
+func main() {
+	neurons := []*Neuron{
+		NewNeuron(0, 1),
+		NewNeuron(1, 2),
+		NewNeuron(2, 3),
+	}
+
+	connections := []Connection{
+		{
+			ANeuron: neurons[0],
+			ALine:   "a",
+			BNeuron: neurons[1],
+			BLine:   "a",
+		},
+		{
+			ANeuron: neurons[0],
+			ALine:   "b",
+			BNeuron: neurons[2],
+			BLine:   "b",
+		},
+		{
+			ANeuron: neurons[2],
+			ALine:   "a",
+			BNeuron: neurons[1],
+			BLine:   "b",
+		},
+	}
+
+	iterations := 2048
 	i := 0
 	for i < iterations {
-		v0 := n0.Iterate()
-		v1 := n1.Iterate()
-		if v0 > 128 {
-			fmt.Println("fire 0")
-			w0 := n0.Set.ByName["a"]
-			w1 := n1.Set.ByName["a"]
-			for j, value := range w0.X {
-				w1.X[j] = (w1.X[j] + value) / 2
-			}
+		for _, neuron := range neurons {
+			neuron.Iterate()
 		}
-		if v1 > 128 {
-			fmt.Println("fire 1")
-			w0 := n0.Set.ByName["a"]
-			w1 := n1.Set.ByName["a"]
-			for j, value := range w1.X {
-				w0.X[j] = (w0.X[j] + value) / 2
+
+		for _, connection := range connections {
+			if connection.ANeuron.Level > 128 {
+				if !connection.ANeuron.Fired {
+					w0 := connection.ANeuron.Set.ByName[connection.ALine]
+					w1 := connection.BNeuron.Set.ByName[connection.BLine]
+					for j, value := range w0.X {
+						w1.X[j] = (w1.X[j] + value) / 2
+					}
+					connection.ANeuron.Fired = true
+				}
+			} else {
+				connection.ANeuron.Fired = false
+			}
+			if connection.BNeuron.Level > 128 {
+				if !connection.BNeuron.Fired {
+					w0 := connection.ANeuron.Set.ByName[connection.ALine]
+					w1 := connection.BNeuron.Set.ByName[connection.BLine]
+					for j, value := range w1.X {
+						w0.X[j] = (w0.X[j] + value) / 2
+					}
+					connection.BNeuron.Fired = true
+				}
+			} else {
+				connection.BNeuron.Fired = false
 			}
 		}
 		i++
 	}
 
-	n0.Graph()
-	n1.Graph()
+	for _, neuron := range neurons {
+		neuron.Graph()
+	}
 }
