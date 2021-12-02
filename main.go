@@ -349,7 +349,7 @@ func main() {
 					w0 := connection.ANeuron.Set.ByName[connection.ALine]
 					w1 := connection.BNeuron.Set.ByName[connection.BLine]
 					for j, value := range w0.X {
-						w1.X[j] = (w1.X[j] + value) / 2
+						w1.X[j] = complex(cmplx.Abs(w1.X[j]), cmplx.Abs(value))
 					}
 					connection.ANeuron.Fired = true
 				}
@@ -361,7 +361,7 @@ func main() {
 					w0 := connection.ANeuron.Set.ByName[connection.ALine]
 					w1 := connection.BNeuron.Set.ByName[connection.BLine]
 					for j, value := range w1.X {
-						w0.X[j] = (w0.X[j] + value) / 2
+						w0.X[j] = complex(cmplx.Abs(w0.X[j]), cmplx.Abs(value))
 					}
 					connection.BNeuron.Fired = true
 				}
